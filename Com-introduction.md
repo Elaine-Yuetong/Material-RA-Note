@@ -848,3 +848,551 @@ Docker容器（ML模型 + DFT代码）→ 虚拟机（VM）→ SLURM调度器 �
 
 想清楚了我们就继续推进到 **4.1.2 Structure and Property Prediction（结构与性能预测）**。😊
 
+
+好的，我们进入 **4.1.2 Structure and Property Prediction（结构与性能预测）** 。这部分讲的是**用ML模型来预测材料的结构和性能**——本质上是监督学习 (Supervised Learning) 的各种变体，但结合了材料领域的特殊性。我把专有名词全部标注英文，用DS视角帮你拆解。
+
+---
+
+## 一、开篇：三种学习范式的对比（Figure 8a-c）
+
+> **原文**：One case in point was that **knowledge co-learning (KCL，知识协同学习)** was chosen when developing a spatial atom interaction learning network [102]. It was proved that the KCL could enhance the convergence of the model ... by the comparison of the **Expert-knowledge-driven learning（专家知识驱动学习）** (Fig. 8a), **Data-driven learning（数据驱动学习）** (Fig. 8b), and **Data-driven knowledge co-learning（数据驱动知识协同学习）** (Fig. 8c).
+
+**翻译**：一个典型案例是在开发**空间原子交互学习网络 (spatial atom interaction learning network)** 时选择了**知识协同学习 (KCL, Knowledge Co-Learning)**。通过对比**专家知识驱动学习 (Expert-knowledge-driven learning)**（图8a）、**数据驱动学习 (Data-driven learning)**（图8b）和**数据驱动知识协同学习 (Data-driven knowledge co-learning)**（图8c），证明了KCL能增强模型在结构-吸附空间建立中的收敛性，从而提升预测精度。
+
+**DS视角**：这是三种不同的“知识来源”方式的对比：
+
+### 三种范式的核心区别
+
+**范式1：Expert-knowledge-driven learning（专家知识驱动学习）**
+
+| 特点 | 说明 |
+|------|------|
+| **知识来源** | 人类专家的物理/化学直觉 + 理论公式 |
+| **做法** | 专家手动设计特征 (handcrafted features) + 物理方程 |
+| **优点** | 可解释性强，物理一致性好 |
+| **缺点** | 专家知识可能不完整，无法覆盖所有情况 |
+| **DS类比** | 传统**特征工程 (Feature Engineering)** + **基于物理的模型 (physics-based model)** |
+
+**范式2：Data-driven learning（数据驱动学习）**
+
+| 特点 | 说明 |
+|------|------|
+| **知识来源** | 大量数据，让模型自己找规律 |
+| **做法** | 端到端学习 (End-to-End Learning)，直接从原始数据学 |
+| **优点** | 能发现人类没想到的模式 |
+| **缺点** | 需要大量数据，可解释性差 |
+| **DS类比** | 深度学习 (Deep Learning) —— 你学过的标准范式 |
+
+**范式3：Data-driven knowledge co-learning（数据驱动知识协同学习）**
+
+| 特点 | 说明 |
+|------|------|
+| **知识来源** | **数据** + **专家知识** 同时使用，相互促进 |
+| **做法** | 模型从数据中学，同时用专家知识做“辅助任务 (auxiliary tasks)”来引导模型 |
+| **优点** | 结合两者优点：数据量大 + 物理一致 |
+| **DS类比** | **多任务学习 (Multi-Task Learning)** + **物理信息神经网络 (PINN, Physics-Informed Neural Network)** |
+
+**对比总结**：
+
+| 维度 | 专家知识驱动 | 数据驱动 | 知识协同学习 |
+|------|-----------|---------|------------|
+| **需要专家知识？** | ✅ 核心 | ❌ 不需要 | ✅ 作为辅助 |
+| **需要大量数据？** | ❌ 不需要 | ✅ 核心 | ✅ 需要，但可以少一些 |
+| **可解释性** | 高 | 低 | 中等 |
+| **泛化能力** | 受限于专家知识 | 受限于数据分布 | 两者互补，更好 |
+
+---
+
+## 二、ML用于生物炭电极优化（Figure 8d）
+
+> **原文**：three ML models were developed for the optimal preparation of **biochar-based electrodes（生物炭基电极）** ... 14 key parameters from recent articles ... Three classic ML prediction models, with **RF（随机森林）** , **GBR（梯度提升回归）** , and **extra tree regression (ETR，极端树回归)** included, were made used of ... It turned out that the GBR demonstrated the best prediction performance with an **R² value of 0.93**.
+
+**翻译**：开发了三种ML模型用于**生物炭基电极 (biochar-based electrodes)** 的最佳制备。从近期文章中收集了14个关键参数。使用了**RF（随机森林）**、**GBR（梯度提升回归）** 和**ETR（极端树回归）** 三种经典ML预测模型。结果表明，**GBR** 表现最佳，**R² = 0.93**。
+
+**DS视角**：这是一个**回归问题 (Regression Problem)** 的模型对比：
+
+| 任务 | 输入 (X) | 输出 (y) |
+|------|---------|---------|
+| 预测生物炭基电极的储能性能 | 14个制备参数（温度、时间、前驱体比例等） | 储能性能（电容值等） |
+
+**三种模型的快速回顾**：
+
+| 模型 | 英文 | 特点 |
+|------|------|------|
+| **RF** | Random Forest | 多棵决策树**并行**集成，鲁棒性好 |
+| **GBR** | Gradient Boosting Regression | 多棵决策树**串行**集成，精度高 |
+| **ETR** | Extra Tree Regression | RF的变体，分裂点**完全随机**，方差更低 |
+
+**R² = 0.93** 意味着模型解释了93%的方差，在材料小样本场景下是很优秀的结果。
+
+---
+
+## 三、多任务学习 (Multi-Task Learning) 再应用
+
+> **原文**：Methods have been come up with to handle the issue of limited data supplying in the primary tasks. ... in a neural network architecture developed for the prediction of the **χ parameter（χ参数）** with limited data ... **multitask learning（多任务学习）** was applied, in which different related tasks with common underlying mechanisms shared were learned simultaneously via a unified model. It was clarified that the multitask learning was able to boost the predictive performance by leveraging and transferring feature representations learned from two auxiliary tasks.
+
+**翻译**：已经提出了处理**主任务 (primary tasks)** 数据有限问题的方法。在为预测χ参数而开发的神经网络架构中，应用了**多任务学习 (multitask learning)** ，即具有共同底层机制的不同相关任务通过统一模型同时学习。阐明了多任务学习能够通过利用和迁移从两个**辅助任务 (auxiliary tasks)** 学到的**特征表示 (feature representations)** 来提升预测性能。
+
+**DS视角**：这是对 **4.1.1 节** 多任务学习的重申和深化。核心机制：
+
+```
+【主任务】预测χ参数（数据少，有偏差）
+        ↓
+【辅助任务1】预测聚合物-溶剂可混溶性（数据多，覆盖广）
+【辅助任务2】COSMO-RS计算的物理化学性质（理论支撑）
+        ↓
+【共享表示层 (Shared Representation Layer)】所有任务共用
+        ↓
+【主任务受益于辅助任务学到的特征表示】→ 泛化能力提升
+```
+
+**关键术语解释**：
+
+| 术语 | 英文 | 解释 |
+|------|------|------|
+| **特征表示 (Feature Representation)** | Feature Representation | 模型从输入中提取的中间特征向量，可以被不同任务共享 |
+| **迁移 (Transfer)** | Transfer | 将辅助任务学到的知识（特征表示）应用到主任务上 |
+| **共同底层机制 (Common Underlying Mechanisms)** | Common Underlying Mechanisms | 不同任务共享的物理/化学规律 |
+
+---
+
+## 四、ML预测参数-性能关系（Figure 8e）
+
+> **原文**：ML can be used to predict the relationship between different parameters and performance ... a strategy to construct **hierarchical porous sponge-like carbon（分级多孔海绵状碳）** was launched for advanced **potassium-ion batteries（钾离子电池）** ... The complete **initial coulombic efficiency (ICE，首次库仑效率)** and capacity structural parameters performance database were input into **ANN（人工神经网络）** ... the predicted capacity and ICE were almost equal to the experimental values.
+
+**翻译**：ML可用于预测不同参数与性能之间的关系。提出了一种构建**分级多孔海绵状碳 (hierarchical porous sponge-like carbon)** 的策略，用于先进**钾离子电池 (potassium-ion batteries)**。将完整的**首次库仑效率 (ICE, Initial Coulombic Efficiency)** 和容量结构参数-性能数据库输入**人工神经网络 (ANN, Artificial Neural Network)**。预测的容量和ICE与实验值几乎相等。
+
+**DS视角**：这是一个**多输出回归 (Multi-Output Regression)** 问题：
+
+| 输入 | 输出（2个） |
+|------|-----------|
+| 结构参数（孔径、比表面积、层间距等） | **容量 (Capacity)** + **首次库仑效率 (ICE)** |
+
+**首次库仑效率 (ICE, Initial Coulombic Efficiency)** 是电池领域的重要指标：
+- 第一次充放电时，实际放出的电量 / 充进去的电量
+- ICE越高，表示电池的不可逆损耗越小
+
+**使用的模型**：**ANN（人工神经网络，Artificial Neural Network）**
+
+**结果**：预测值与实验值几乎相等 → 验证了ML模型的预测能力。
+
+---
+
+## 五、Figure 8f：数字孪生 (Digital Twin) 平台
+
+> **原文**：a cross-scale multi-stage analytic platform ... was developed for the lifecycle carbon intensity investigation of electrochemical batteries ... ML was applied ... by taking advantages of the **digital twin（数字孪生）** , the performance estimation could be cost-saving and time-efficient.
+
+**翻译**：开发了一个跨尺度多阶段分析平台，用于电化学电池生命周期碳强度的研究。ML被应用于此。通过利用**数字孪生 (digital twin)** ，性能估算可以节省成本且提高时间效率。
+
+**DS视角**：**数字孪生 (Digital Twin)** 是工业4.0的核心概念：
+
+| 概念 | 解释 |
+|------|------|
+| **物理实体 (Physical Entity)** | 真实世界中的电池（正在使用中） |
+| **数字孪生 (Digital Twin)** | 物理实体在数字世界中的**虚拟镜像**（由数据和模型驱动） |
+| **作用** | 在虚拟世界中做模拟/预测，不需要在真实电池上做破坏性实验 |
+
+**在电池领域的应用**：
+
+```
+真实电池运行数据（电压、电流、温度等）
+        ↓
+输入数字孪生模型（ML模型）
+        ↓
+虚拟模拟：预测电池剩余寿命、评估不同工况下的表现
+        ↓
+不需要做真实实验 → 节省成本和时间
+```
+
+---
+
+## 六、本章总结
+
+| 主题 | 关键方法 | DS对应 | 核心信息 |
+|------|---------|--------|---------|
+| **三种学习范式** | Expert-knowledge-driven, Data-driven, KCL | 特征工程 vs 端到端 vs 多任务学习 | **知识+数据协同**比单独用更好 |
+| **生物炭电极优化** | RF vs GBR vs ETR 对比 | 模型选择 + 回归 | GBR表现最佳 (R²=0.93) |
+| **χ参数预测** | 多任务学习 (Multi-Task Learning) | 辅助任务 → 主任务迁移 | 用辅助任务解决**数据有偏**问题 |
+| **钾离子电池性能预测** | ANN 多输出回归 | 多输出回归 (Multi-Output) | 同时预测容量 + ICE |
+| **数字孪生平台** | Digital Twin + ML | 虚拟仿真 + 预测 | **虚拟实验**替代物理实验，降本增效 |
+
+---
+
+## 七、给你两个思考题
+
+1. **"专家知识驱动学习 (Expert-knowledge-driven learning)"和"数据驱动学习 (Data-driven learning)"各自的优缺点是什么？为什么"知识协同学习 (KCL)"能取长补短？**
+
+2. **"数字孪生 (Digital Twin)"在DS里对应什么概念？为什么它能"降本增效"？**
+
+想清楚了我们就继续推进到 **4.2 For Discovery of New Materials（发现新材料）**。😊
+
+好的，我们进入 **4.1.3 Experimental Validation（实验验证）** 。这部分讲的是**模型的预测结果怎么用实验来检验**——也就是**你的模型在真实世界里到底准不准**。我把所有专有名词标注英文，并用DS视角帮你拆解。
+
+---
+
+## 一、开篇：实验验证的重要性
+
+> **原文**：The prediction capacities for structures or properties are usually examined by **experiments（实验）** comprehensively. It is noticeable that the prediction performance could then be evaluated from various aspects and in a diversity of conditions.
+
+**翻译**：对结构或性能的预测能力通常需要通过**实验 (experiments)** 进行全面检验。预测性能可以从多个方面、在不同条件下进行评估。
+
+**DS视角**：这是ML里最重要的原则——**模型在测试集（这里是实验数据）上的表现才是真正的表现**。
+
+```
+训练集 (Training Set) 上表现好 → 可能只是过拟合 (overfitting)
+测试集 (Test Set) 上表现好 → 才是真正的泛化能力 (generalization)
+实验验证 (Experimental Validation) → 材料领域最严苛的“测试集”
+```
+
+---
+
+## 二、DeepSorption 的实验验证
+
+> **原文**：For example, the **spatial atom interaction learning network（空间原子交互学习网络）** was employed for prediction of **gas adsorption（气体吸附）** , and it was verified that the predicted gas uptake was consistent with the actual value on **CoREMOF-CO₂（计算就绪实验金属有机框架-二氧化碳）** and **hMOF-CO₂（假设性金属有机框架-二氧化碳）** . In contrast to the other models, the absolute errors were much smaller and more distributed centralized for **DeepSorption**. Furthermore, higher **coefficient of determination（决定系数，\(R^2\)）** values could be realized. It turned out that both the highest \(R^2\) value and the lowest **MAE（平均绝对误差）** could be achieved by DeepSorption compared with the other models.
+
+**翻译**：例如，将**空间原子交互学习网络 (spatial atom interaction learning network)** 用于**气体吸附 (gas adsorption)** 预测，验证结果表明，在 **CoREMOF-CO₂** 和 **hMOF-CO₂** 上，预测的气体吸附量与实验值一致。与其他模型相比，**DeepSorption** 的**绝对误差 (absolute errors)** 更小且更集中。此外，**决定系数 (coefficient of determination，\(R^2\))** 值更高。结果表明，与其他模型相比，DeepSorption 同时实现了最高的 \(R^2\) 值和最低的 **MAE（平均绝对误差，Mean Absolute Error）**。
+
+**DS视角**：这是**模型对比 (Model Comparison)** 的标准流程：
+
+### 评估指标对照表
+
+| 指标 | 英文 | 含义 | 怎么判断 |
+|------|------|------|---------|
+| **绝对误差** | **Absolute Error** | 预测值 - 真实值的绝对值 | **越小越好** |
+| **决定系数** | **\(R^2\) (Coefficient of Determination)** | 模型解释了多少方差 | **越高越好**（最高1.0） |
+| **MAE** | **Mean Absolute Error（平均绝对误差）** | 所有样本绝对误差的平均值 | **越小越好** |
+
+### 实验结果对比
+
+| 模型 | 绝对误差 | \(R^2\) | MAE |
+|------|---------|--------|-----|
+| 其他模型 | 大且分散 | 较低 | 较高 |
+| **DeepSorption** | **更小且更集中** | **最高** | **最低** |
+
+> **DeepSorption 在所有指标上全面优于其他模型 → 实验验证了它的预测能力。**
+
+---
+
+## 三、数字孪生平台（接上节 Figure 8f）
+
+> **原文**：a **cross-scale multi-stage analytic platform（跨尺度多阶段分析平台）** featured with inter-disciplinary and trans-disciplinary was developed for the **lifecycle carbon intensity（生命周期碳强度）** investigation of electrochemical batteries ... ML was applied to address the issues that the collected data from controlled test conditions in the laboratory were not managed to represent various real application scenarios, and the **state-of-charge（荷电状态）** prediction could be made. ... by taking advantages of the **digital twin（数字孪生）** , the performance estimation could be cost-saving and time-efficient.
+
+**翻译**：开发了一个**跨尺度多阶段分析平台 (cross-scale multi-stage analytic platform)** ，具有跨学科和超学科特色，用于电化学电池的**生命周期碳强度 (lifecycle carbon intensity)** 研究。ML被用于解决实验室受控测试条件下收集的数据无法代表各种真实应用场景的问题，并可进行**荷电状态 (state-of-charge)** 预测。通过利用**数字孪生 (digital twin)** ，性能评估可以节省成本和时间。
+
+**DS视角**：这里把 **4.1.2** 的数字孪生概念深化了：
+
+### 实验室数据 vs 真实世界数据
+
+| 数据类型 | 特点 | 问题 |
+|---------|------|------|
+| **实验室数据 (Lab Data)** | 受控条件、标准化 | 不能代表真实世界的各种场景 → **分布偏移 (distribution shift)** |
+| **真实世界数据 (Real-world Data)** | 各种工况、噪声大 | 难以大规模采集 |
+
+**ML的作用**：架起两者之间的桥梁——用实验室数据训练模型，然后让模型在真实世界数据上也能工作（这就是**泛化 (generalization)**）。
+
+### 数字孪生在电池领域的应用
+
+```
+【物理电池】正在充放电中
+        ↓ 实时数据（电压、电流、温度）
+【数字孪生模型】→ 预测荷电状态 (state-of-charge)
+        ↓
+【结果】不中断电池运行就能知道内部状态 → 节省成本 + 省时间
+```
+
+**荷电状态 (state-of-charge)** 就是电池的“电量百分比”——你手机右上角那个数字。
+
+---
+
+## 四、AI + 电池寿命预测
+
+> **原文**：The **lithium-ion batteries（锂离子电池）** , which are featured with high energy densities and low production costs, have drawn great attention ... serving as renewable energy solutions for many fields, like **electric vehicles（电动汽车）** . ... AI with **battery lifetime prediction（电池寿命预测）** is also one of the research hotspots, since the capacity of these batteries fades inevitably with cyclic operations ... due to a variety of factors, like **electrode materials（电极材料）** , **cycling protocols（循环协议）** , **ambient temperatures（环境温度）** , and so on.
+
+**翻译**：**锂离子电池 (lithium-ion batteries)** 具有高能量密度和低生产成本的特点，已引起广泛关注，为包括**电动汽车 (electric vehicles)** 在内的许多领域提供可再生能源解决方案。AI与**电池寿命预测 (battery lifetime prediction)** 的结合也是研究热点之一，因为电池容量会随着循环操作不可避免衰退……影响因素包括**电极材料 (electrode materials)**、**循环协议 (cycling protocols)**、**环境温度 (ambient temperatures)** 等。
+
+**DS视角**：这是一个**多因素时间序列预测 (Multi-Factor Time Series Forecasting)** 问题：
+
+| 任务 | 输入 | 输出 |
+|------|------|------|
+| 电池寿命预测 | 早期充放电数据（电压、电流、温度）+ 材料信息 + 使用条件 | 剩余寿命（还能充放电多少次） |
+
+**为什么难？**
+
+| 因素 | 对电池寿命的影响 |
+|------|----------------|
+| **电极材料 (electrode materials)** | 不同材料老化速度不同 |
+| **循环协议 (cycling protocols)** | 快充 vs 慢充，影响不同 |
+| **环境温度 (ambient temperature)** | 高温加速老化，低温降低效率 |
+
+---
+
+## 五、BatLiNet：电芯间深度学习框架
+
+> **原文**：a DL framework, **BatLiNet**, which was designed to predict battery lifetime reliably across a variety of aging conditions, was proposed [147]. In contrast to the traditional models which solely focused on individual cells, this framework adopted **inter-cell learning（电芯间学习）** which contrasted pairs of battery cells for discerning lifetime differences. ... the experimental results ... verified its superior accuracy and robustness ... when comparing to other existing models.
+
+**翻译**：提出了一个DL框架——**BatLiNet**，设计用于在各种老化条件下可靠地预测电池寿命。与传统模型仅关注单个电芯不同，该框架采用了**电芯间学习 (inter-cell learning)** ，通过对比成对的电芯来辨别寿命差异。实验结果验证了其相较于现有模型更优越的准确性和鲁棒性。
+
+**DS视角**：这是 **3.2 节** 讲过的 **inter-cell learning（电芯间学习）** 的具体实现：
+
+### BatLiNet 的核心创新
+
+| 方法 | 传统模型（intra-cell） | BatLiNet（inter-cell） |
+|------|----------------------|----------------------|
+| **输入** | 单个电芯的早期数据 | **两个电芯的成对对比数据** |
+| **学习目标** | 预测绝对寿命值 | 预测**寿命差异** |
+| **为什么更好** | 受太多因素影响 | **共同因素被抵消**，只关注本质差异 |
+| **鲁棒性** | 对工况变化敏感 | 在多种老化条件下都稳定 |
+
+**实验结果验证**："derived from a broad spectrum of aging conditions"（来自广泛的老化条件）→ 模型在多种不同条件下都表现优异。
+
+---
+
+## 六、开源平台：BatteryML
+
+> **原文**：an **open-source platform（开源平台）** with data preprocessing, feature extraction, and the implementation of both conventional and state-of-the art models integrated has been developed, which aims to provide a collaborative platform on which experts from diverse specializations can contribute their own efforts [174].
+
+**翻译**：开发了一个**开源平台 (open-source platform)** ，集成了数据预处理、特征提取以及传统和最先进模型的实现，旨在提供一个协作平台，让来自不同领域的专家都能贡献自己的力量。
+
+**DS视角**：这是材料AI领域**标准化 (Standardization)** 和**可复现性 (Reproducibility)** 的重要一步：
+
+### 开源平台的意义
+
+| 特性 | 为什么重要 |
+|------|-----------|
+| **数据预处理 (Data Preprocessing)** | 统一数据清洗标准，避免“不同研究用不同方法” |
+| **特征提取 (Feature Extraction)** | 共享最优特征工程方法 |
+| **多种模型集成** | 可以公平对比不同模型的表现 |
+| **协作平台** | 材料学家 + 数据科学家可以在同一个平台上工作 |
+
+> **这对你DS的意义**：BatteryML 是一个**现成的基准 (benchmark)**，你可以用它来测试自己的模型，而不需要从头开始搭建数据处理流程。
+
+---
+
+## 七、本章总结
+
+| 主题 | 关键内容 | DS对应 |
+|------|---------|--------|
+| **DeepSorption 验证** | 绝对误差、\(R^2\)、MAE 全面优于其他模型 | **模型评估 (Model Evaluation)** |
+| **数字孪生平台** | 实验室数据 → 真实场景泛化 | **分布泛化 (Distribution Generalization)** |
+| **电池寿命预测** | 多种因素影响（材料、协议、温度） | **多因素时间序列预测 (Multi-Factor Time Series)** |
+| **BatLiNet** | inter-cell learning（电芯间学习） | **成对学习 (Pairwise Learning)** |
+| **BatteryML 开源平台** | 数据预处理 + 特征提取 + 模型集成 | **标准化 (Standardization) + 协作平台** |
+
+---
+
+## 八、给你两个思考题
+
+1. **实验验证 (Experimental Validation)** 在材料AI里为什么比**交叉验证 (Cross-Validation)** 更重要？（提示：想想“真实世界”和“训练集”的区别）
+
+2. **BatLiNet 使用 inter-cell learning（电芯间学习）预测寿命差异，为什么比预测绝对寿命更鲁棒？**（提示：想想“共同因素抵消”）
+
+想清楚了我们就继续推进到 **4.2 For Discovery of New Materials（发现新材料）**。😊
+
+好的，我们进入 **4.2.1 Excavating the Existing Data（挖掘现有数据）**。这部分讲的是**如何从已有的数据中“挖”出有价值的信息来发现新材料**——本质上是**数据挖掘 (Data Mining) + 主动学习 (Active Learning) + 生成模型 (Generative Models)** 的组合应用。我把所有专有名词标注英文，用DS视角帮你拆解。
+
+---
+
+## 一、开篇：数据是基石，但数据有偏差
+
+> **原文**：The dataset used for training is the cornerstone of ML models. The experimental synthesis data provided by studies serve as important resources for the material synthesis. However, only successful cases are usually included in these studies, resulting in the **imbalanced distribution of data category（数据类别分布不平衡）**. Another important resource is from the **first-principles calculations（第一性原理计算）**. Besides, previous studies and extensive laboratory experience can offer valuable intuitions for the preparation of new materials.
+
+**翻译**：训练所用的数据集是ML模型的基石。研究提供的实验合成数据是材料合成的重要资源。然而，这些研究通常只包含成功案例，导致**数据类别分布不平衡 (imbalanced distribution of data category)**。另一个重要资源来自**第一性原理计算 (first-principles calculations)**。此外，前期研究和丰富的实验室经验可以为新材料的制备提供有价值的直觉。
+
+**DS视角**：这是数据科学中最经典的**数据偏差 (Data Bias)** 问题：
+
+| 数据来源 | 包含什么 | 问题 |
+|---------|---------|------|
+| 文献中的实验合成数据 | 几乎全是**成功案例** | 没有失败案例 → 模型不知道“什么会失败” |
+| 第一性原理计算 (DFT) | 计算生成的数据 | 量大但可能有系统性误差 |
+| 实验室经验 | 专家的直觉 | 难以结构化，无法直接输入模型 |
+
+> **“只有成功案例” = 正样本 (positive samples) 极多，负样本 (negative samples) 几乎没有 → 分类模型会偏向预测“成功”，泛化能力差。**
+
+---
+
+## 二、HTE 生成数据 + 人工分类（Figure 9a）
+
+> **原文**：in an attempt to explore the synthesis feasibility of **two-dimensional silver/bismuth (2D AgBi) iodide perovskites（二维银/铋碘化物钙钛矿）** , **organic spacers（有机间隔层）** from both the previously reported 2D perovskites and the chemical intuitions were exploited. The **high-throughput experiments (HTE，高通量实验)** were made use of to acquire the material dataset. It was proved that only 13 kinds of organic spacers were able to form 2D AgBi iodide perovskite structures, and the organic spacers were sorted into ‘2D perovskite’ and ‘non-2D perovskite’ accordingly (Fig. 9a).
+
+**翻译**：在探索**二维银/铋碘化物钙钛矿 (2D AgBi iodide perovskites)** 的合成可行性时，利用了先前报道的2D钙钛矿中的**有机间隔层 (organic spacers)** 以及化学直觉。采用**高通量实验 (HTE, High-Throughput Experiments)** 获取材料数据集。结果证明，只有13种有机间隔层能够形成2D AgBi碘化物钙钛矿结构，因此将有机间隔层分为“2D钙钛矿”和“非2D钙钛矿”两类。
+
+**DS视角**：这是一个**二分类 (Binary Classification)** 数据集的构建过程：
+
+| 步骤 | 做什么 | 结果 |
+|------|--------|------|
+| 1. 选择候选 | 从文献 + 化学直觉中挑选有机间隔层 | 一批候选分子 |
+| 2. HTE实验 | 高通量实验快速测试每个候选 | 实验数据 |
+| 3. 标注 | 能形成2D钙钛矿 → 正样本；不能 → 负样本 | **13个正样本，其余为负样本** |
+
+**HTE（高通量实验，High-Throughput Experiments）** 是材料领域的“批量实验”技术——一次能做几十上百个实验，快速生成数据。
+
+**对DS的意义**：13个正样本 vs 大量的负样本 → 严重的**类别不平衡 (class imbalance)**。
+
+---
+
+## 三、DFT生成数据 + ML分类筛选（Figure 9b-f）
+
+> **原文**：in an attempt to develop **Co-free and low strain cathode materials（无钴低应变正极材料）** for **sodium-ion batteries（钠离子电池）** with the assistance of ML (Fig. 9b), **1451 O3 and P3 layered transition metal oxides (LTMOs，O3/P3层状过渡金属氧化物)** were generated via **DFT calculations（DFT计算）** (Fig. 9c). The classification ML models were then constructed to evaluate the structural stability and phase transition (Fig. 9d), leading to the identification of **128 highly reversible high-performance cathode material candidates（128种高度可逆的高性能正极材料候选）** (Fig. 9e). ... a **stratified k-fold（分层k折交叉验证）** importing data hierarchically from every class were taken advantages for the construction of a balanced train set (Fig. 9f).
+
+**翻译**：在ML辅助下开发**无钴低应变正极材料 (Co-free and low strain cathode materials)** 用于**钠离子电池 (sodium-ion batteries)** 时（图9b），通过**DFT计算 (DFT calculations)** 生成了**1451种O3/P3层状过渡金属氧化物 (LTMOs)**（图9c）。然后构建**分类ML模型 (classification ML models)** 来评估结构稳定性和相变（图9d），最终识别出**128种高度可逆的高性能正极材料候选 (128 candidates)**（图9e）。采用**分层k折交叉验证 (stratified k-fold)** 从每个类别中分层导入数据，构建平衡的训练集（图9f）。
+
+**DS视角**：这是一个完整的**高通量计算筛选 (High-Throughput Computational Screening)** 流程：
+
+### 完整流程拆解
+
+| 步骤 | 做什么 | 数据/方法 |
+|------|--------|----------|
+| **Step 1: 数据生成** | DFT计算生成1451种LTMOs的结构和性质 | 计算数据 |
+| **Step 2: 模型训练** | 用分类ML模型评估结构稳定性和相变 | 分类模型 (Classification) |
+| **Step 3: 筛选** | 从1451种中筛选出128种高性能候选 | 模型预测 → 筛选 |
+| **Step 4: 数据平衡** | 用**分层k折交叉验证 (stratified k-fold)** 解决类别不平衡 | 分层采样 |
+
+### 什么是分层k折交叉验证 (Stratified k-Fold Cross-Validation)？
+
+**普通 k折交叉验证 (k-Fold CV)**：把数据随机分成k份，每份中正负样本比例**不一定**和全集一致。
+
+**分层k折交叉验证 (Stratified k-Fold CV)**：把数据分成k份时，**保证每一份中正负样本的比例和全集一致**。
+
+```
+全集：80% 正样本，20% 负样本
+普通 k折：某一份可能 95% 正样本，5% 负样本 → 评估不稳定
+分层 k折：每一份都是 80% 正样本，20% 负样本 → 评估稳定
+```
+
+**为什么用五折 (5-fold)？**
+
+> "Given the fact that there were not enough data, it was conducted in fivefold (train set/validation set = 8:2)"（考虑到数据不足，采用五折，训练集/验证集 = 8:2）
+
+数据量小 → 验证集不能太小（20%的验证集保证了足够的评估样本）→ 用五折（每折20%验证集）。
+
+---
+
+## 四、子域发现 (Subdomain Discovery) 解决数据偏差
+
+> **原文**：Although there are both positive and negative material data in the datasets from HTE, **subjective preferences（主观偏好）** still exist. ... **data-mining approaches（数据挖掘方法）** were taken advantages of to identify the **applicable subdomains（适用子域）** for ML models, and then, models were trained on the identified subdomain ... It turned out that the **molecular weight（分子量）** and the **third ordered kappa index（三阶kappa指数）** were the two descriptors standing out ... based on the derivation of the **rigid sphere model（刚性球模型）** , the width of organic spacers was also of importance.
+
+**翻译**：尽管HTE数据集中同时包含正负样本，但**主观偏好 (subjective preferences)** 仍然存在。采用**数据挖掘方法 (data-mining approaches)** 来识别ML模型的**适用子域 (applicable subdomains)** ，然后在识别出的子域上训练模型。结果表明，**分子量 (molecular weight)** 和**三阶kappa指数 (third ordered kappa index)** 是两个突出的描述符……基于**刚性球模型 (rigid sphere model)** 的推导，有机间隔层的宽度也很重要。
+
+**DS视角**：这是**子空间分析 (Subspace Analysis)** 的典型应用：
+
+### 问题：数据有偏好
+
+即使HTE同时包含成功和失败案例，但实验设计本身可能带有主观偏好——比如研究者倾向于测试“看起来有希望”的分子，导致数据空间覆盖不均匀。
+
+### 解决方案：找到“适用子域”
+
+```
+【全数据集】有偏好，分布不均匀
+        ↓ 子群发现 (Subgroup Discovery)
+【适用子域 (Subdomain)】数据分布更均衡，模型学得更好
+        ↓
+在子域上训练 → 发现关键描述符 (descriptors)
+```
+
+### 关键描述符
+
+| 描述符 | 英文 | 为什么重要 |
+|--------|------|-----------|
+| **分子量** | Molecular Weight | 越大，越可能形成稳定结构 |
+| **三阶kappa指数** | Third Ordered Kappa Index | 描述分子形状/分支程度的拓扑指数 |
+| **有机间隔层宽度** | Width of Organic Spacers | 基于**刚性球模型 (rigid sphere model)**，决定了结构稳定性 |
+
+> **在子域上训练后，2D钙钛矿和非2D钙钛矿的分布是平衡的** → 模型的分类更可靠。
+
+---
+
+## 五、Haeckelite新化合物发现（Figure 9g）
+
+> **原文**：In an attempt to discover new **Haeckelite compounds（Haeckelite化合物）** for **optoelectronic devices（光电器件）** with the assistant from ML ... 1083 **square-octagon XY form structures（方-八边形XY结构）** were created. ... 350 materials were got after the investigation of the **formation energy（形成能）** , **bandgap（带隙）** , and **convex hull energy（凸包能）** ... and **13 semiconducting Haeckelite structures（13种半导体Haeckelite结构）** were obtained after the calculations of electronic structures, dynamic stability, and the multistep evolutionary.
+
+**翻译**：在ML辅助下发现用于**光电器件 (optoelectronic devices)** 的新型**Haeckelite化合物 (Haeckelite compounds)** ……创建了1083种**方-八边形XY结构 (square-octagon XY form structures)** ……通过考察**形成能 (formation energy)**、**带隙 (bandgap)** 和**凸包能 (convex hull energy)** 得到350种材料……经过电子结构、动态稳定性和多步进化计算后，最终获得**13种半导体Haeckelite结构 (13 semiconducting Haeckelite structures)**。
+
+**DS视角**：这是一个**多步筛选漏斗 (Multi-Step Screening Funnel)** 流程：
+
+### 筛选漏斗流程
+
+```
+1083 种候选结构（初始生成）
+        ↓ 筛选条件1：形成能 (formation energy)
+        ↓ 筛选条件2：带隙 (bandgap)
+        ↓ 筛选条件3：凸包能 (convex hull energy)
+350 种材料（通过ML筛选）
+        ↓ 筛选条件4：电子结构 (electronic structure)
+        ↓ 筛选条件5：动态稳定性 (dynamic stability)
+        ↓ 筛选条件6：多步进化 (multistep evolutionary)
+13 种半导体Haeckelite结构（最终候选）
+```
+
+### 关键术语解释
+
+| 术语 | 英文 | 解释 |
+|------|------|------|
+| **形成能 (Formation Energy)** | Formation Energy | 从单质形成该化合物需要的能量 → 越负越稳定 |
+| **带隙 (Bandgap)** | Bandgap | 半导体材料的关键参数 → 决定了光电性能 |
+| **凸包能 (Convex Hull Energy)** | Convex Hull Energy | 衡量材料热力学稳定性的指标 → 在凸包上 = 稳定 |
+
+> **每筛掉一批，候选数量降一个数量级：1083 → 350 → 13，最终只留下最有可能的候选。**
+
+---
+
+## 六、GNoME：大规模生成 + 筛选（Figure 9h）
+
+> **原文**：in some cases the space of possible materials is far too large, and it is difficult to sample in an unbiased manner. ... two frameworks were taken advantages of to generate and filtrate these candidates (Fig. 9h). ... **symmetry aware partial substitutions (SAPS，对称性感知部分替换)** were used to enable incomplete replacement efficiently. ... **graph networks for materials exploration (GNoME，材料探索图网络)** were trained on available data to filter candidate structures. ... each atom was represented as a single **node（节点）** in the graph, and **edges（边）** were defined on the occasion where the interatomic distance was less than the defined threshold. ... After **3-6 layers of message passing（消息传递层）** , an output layer projected the global vector so as to obtain an estimate of the energy. ... almost an **order of magnitude（一个数量级）** larger than previous work could be achieved via GNoME.
+
+**翻译**：在某些情况下，可能材料的空间过于庞大，难以以无偏方式采样。采用了两个框架来生成和筛选候选结构（图9h）。**对称性感知部分替换 (SAPS, Symmetry Aware Partial Substitutions)** 被用于高效实现不完全替换。**材料探索图网络 (GNoME, Graph Networks for Materials Exploration)** 在已有数据上训练，用于筛选候选结构。每个原子表示为图中的**节点 (node)** ，**边 (edge)** 在原子间距离小于设定阈值时定义。经过**3-6层消息传递 (message passing)** 后，输出层将全局向量投影以获得能量估计。GNoME的成果比之前的工作大了近**一个数量级 (order of magnitude)**。
+
+**DS视角**：这是**生成模型 (Generative Models) + 图神经网络 (GNN, Graph Neural Networks)** 在大规模材料发现中的顶级应用。GNoME是Google DeepMind的工作（前文提到过）。
+
+### 两个框架的协作
+
+| 框架 | 功能 | 方法 |
+|------|------|------|
+| **框架1：生成** | 生成候选结构 | **SAPS（对称性感知部分替换）**——在已知晶体结构上做部分离子替换，生成新结构 |
+| **框架2：筛选** | 筛选稳定候选 | **GNoME（图网络）**——用GNN预测结构稳定性，过滤掉不稳定的 |
+
+### GNoME 的 GNN 架构
+
+```
+【输入】晶体结构（晶格 + 原子 + 位置）
+        ↓
+【图表示】原子 → 节点 (node)；原子间距离 < 阈值 → 边 (edge)
+        ↓
+【消息传递 (Message Passing)】3-6层，邻居节点和边的信息聚合
+        ↓
+【输出】全局向量 → 能量估计
+```
+
+### 为什么GNoME这么强？
+
+| 指标 | 之前的工作 | GNoME |
+|------|-----------|-------|
+| 发现的新结构数量 | 较少 | **2.2 million（220万种新结构）** |
+| 效率提升 | - | **几乎提高了一个数量级 (order of magnitude)** |
+
+> **GNoME = 在搜索空间 (search space) 里用GNN做“智能筛选”，而不是随机搜索 → 效率提升10倍。**
+
+---
+
+## 七、本章总结
+
+| 主题 | 关键方法 | DS对应 | 核心信息 |
+|------|---------|--------|---------|
+| **HTE + 人工标注** | 高通量实验生成数据，人工分类 | 数据标注 + 类别不平衡 | 13个正样本 vs 大量负样本 |
+| **DFT + ML分类** | DFT生成1451种，ML筛选出128种 | 高通量筛选 (High-Throughput Screening) | 分层k折解决类别不平衡 |
+| **子域发现** | 在数据分布更均衡的子域上训练 | 子空间分析 (Subspace Analysis) | 分子量 + kappa指数是关键描述符 |
+| **Haeckelite筛选漏斗** | 1083 → 350 → 13 的多步筛选 | 多步筛选漏斗 | 每步筛掉一个数量级 |
+| **SAPS + GNoME** | 生成 + GNN筛选 | 生成模型 + 图神经网络 | 效率提升一个数量级 |
+
+---
+
+## 八、给你两个思考题
+
+1. **为什么HTE实验数据中“只有成功案例”会导致模型泛化能力差？**（提示：想想正负样本不平衡）
+
+2. **GNoME用GNN做能量预测，和传统DFT计算相比，最大的优势是什么？**（提示：想想计算速度 vs 精度）
+
+想清楚了我们就继续推进到 **4.2.2 Screening for Excellent Performance and High Synthesis Feasibility（筛选高性能和高合成可行性的材料）**。😊
+
+
+
+
